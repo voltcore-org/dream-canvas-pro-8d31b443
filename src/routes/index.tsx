@@ -150,22 +150,20 @@ function Studio() {
 
     await Promise.all(
       slots.map(async (slot) => {
-        const onFrame = (dataUrl: string, isFinal: boolean) =>
+        let lastSrc: string | null = null;
+        const onFrame = (dataUrl: string, isFinal: boolean) => {
+          lastSrc = dataUrl;
           setPending((current) =>
             current.map((item) => (item.id === slot.id ? { ...item, src: dataUrl, isFinal } : item)),
           );
+        };
         try {
           if (references.length > 0) {
             await editImage(references, text, { size, quality }, onFrame);
           } else {
             await generateImage(text, { size, quality }, onFrame);
           }
-          const finalSrc = await new Promise<string | null>((resolve) =>
-            setPending((current) => {
-              resolve(current.find((item) => item.id === slot.id)?.src ?? null);
-              return current;
-            }),
-          );
+          const finalSrc: string | null = lastSrc;
           if (!finalSrc) throw new Error("No image returned");
           const stored: StoredImage = {
             id: newId(),
