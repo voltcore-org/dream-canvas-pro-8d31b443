@@ -154,7 +154,7 @@ function TileAction({
   label: string;
   icon: React.ReactNode;
   onClick: () => void;
-  disabled?: boolean;
+  disabled?: boolean | undefined;
 }) {
   return (
     <button
