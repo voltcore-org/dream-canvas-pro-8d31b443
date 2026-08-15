@@ -131,6 +131,66 @@ function Studio() {
     setImages((current) => current.filter((image) => image.id !== id));
   };
 
+  const refine = async (source: StoredImage, mode: "upscale" | "variations") => {
+    if (!activeId) return;
+    const chatId = activeId;
+    const jobs = mode === "upscale" ? 1 : Math.max(2, count);
+    const instruction =
+      mode === "upscale"
+        ? `Upscale this image: keep the exact same composition, subject, colors and framing, but render it with much sharper detail, cleaner edges and higher fidelity. Original prompt: ${source.prompt}`
+        : `Create a fresh variation of this image: keep the same subject, style and mood, but change pose, lighting and composition details. Original prompt: ${source.prompt}`;
+    const slots: Pending[] = Array.from({ length: jobs }, () => ({
+      id: newId(),
+      src: null,
+      isFinal: false,
+    }));
+    setPending((current) => [...current, ...slots]);
+    setBusy(true);
+    toast.success(mode === "upscale" ? "Upscaling…" : "Making variations…");
+
+    await Promise.all(
+      slots.map(async (slot) => {
+        let lastSrc: string | null = null;
+        const onFrame = (dataUrl: string, isFinal: boolean) => {
+          lastSrc = dataUrl;
+          setPending((current) =>
+            current.map((item) => (item.id === slot.id ? { ...item, src: dataUrl, isFinal } : item)),
+          );
+        };
+        try {
+          await editImage(
+            [source.blob],
+            instruction,
+            { size: source.size || size, quality: mode === "upscale" ? "high" : quality },
+            onFrame,
+          );
+          const finalSrc: string | null = lastSrc;
+          if (!finalSrc) throw new Error("No image returned");
+          const stored: StoredImage = {
+            id: newId(),
+            chatId,
+            prompt: `${mode === "upscale" ? "Upscaled" : "Variation"} · ${source.prompt}`,
+            size: source.size || size,
+            blob: await dataUrlToBlob(finalSrc),
+            fromReference: true,
+            createdAt: Date.now(),
+          };
+          await addImage(stored);
+          setImages((current) => (chatId === activeId ? [...current, stored] : current));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Refine failed";
+          toast.error(message.slice(0, 180));
+        } finally {
+          setPending((current) => current.filter((item) => item.id !== slot.id));
+        }
+      }),
+    );
+
+    await touchChat(chatId);
+    await refreshChats();
+    setBusy(false);
+  };
+
   const run = async () => {
     const text = prompt.trim();
     if (!text || !activeId) {
@@ -260,6 +320,8 @@ function Studio() {
               image={image}
               onDelete={removeImage}
               onReuse={addReferenceFromImage}
+              onRefine={(target, mode) => void refine(target, mode)}
+              refining={busy}
             />
           ))}
           {pending.map((slot) => (
