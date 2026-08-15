@@ -91,8 +91,9 @@ export async function editImage(
 ): Promise<void> {
   const build = (stream: boolean) => {
     const fd = new FormData();
-    if (files.length === 1) {
-      fd.append("image", files[0], "source.png");
+    const first = files[0];
+    if (files.length === 1 && first) {
+      fd.append("image", first, "source.png");
     } else {
       files.forEach((f, i) => fd.append("image[]", f, `source-${i}.png`));
     }
